@@ -144,17 +144,6 @@ for target in "${targets_order[@]}"; do
         cd "$BUILDDIR/${target}/${package}-${versions[$package]}"
 		
         printf "\tConfiguring ...\n"
-		# printf "\t
-		# ./configure \
-          # --libdir=/usr/lib \
-          # --enable-static \
-          # --disable-shared \
-          # --enable-static-libc \
-          # ${includes[$package]} \
-          # ${libs[$package]} \
-          # ${sysdeps[$package]} \
-          # ${configopts[$package]}\n"
-		
 		./configure \
           --libdir=/usr/lib \
           --enable-static \
@@ -187,9 +176,8 @@ for target in "${targets_order[@]}"; do
         cd "$BUILDDIR/${target}/${package}-${versions[$package]}"
 		
         printf "\tConfiguring ...\n"
-		printf "\t./configure --prefix=$PACKAGEDIR/${package}-${target}\n"
-		eval {mkdir -p,cd}\ build\;
-		
+		mkdir -p build
+		cd build		
 		cmake -DCMAKE_INSTALL_PREFIX="$PACKAGEDIR/${package}-${target}" .. 
 		
         printf "\tMaking ...\n"
