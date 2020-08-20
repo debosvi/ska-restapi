@@ -10,23 +10,28 @@ PACKAGEDIR=$TOPDIR/pkg
 DISTDIR=$TOPDIR/dist
 PATCHDIR=$TOPDIR/patches
 SYSDEPSDIR=$TOPDIR/sysdeps
+STAGINGDIR=$TOPDIR/staging
+TARGETDIR=$TOPDIR/target
 
 dl() {
-  url=$1
-  dest=$2
-  if [[ -z "$dest" ]] ; then
-    dest="$DOWNLOADDIR/$(basename $url)"
-  fi
-  printf "Downloading $(basename $url)\n"
-  wget -c -q -O "$dest" "$url"
+    url=$1
+    dest=$2
+    if [[ -z "$dest" ]] ; then
+        dest="$DOWNLOADDIR/$(basename $url)"
+    fi
+    if [[ -f "$dest" ]]; then
+        printf "$(basename $url) already there\n"
+    else
+        printf "Downloading $(basename $url)\n"
+        wget -c -q -O "$dest" "$url"
+    fi
 }
-
 
 # point to make
 MAKE_4x="make"
 
 printf "Creating main dirs\n"
-mkdir -p "$DOWNLOADDIR" "$BUILDDIR" "$PACKAGEDIR" "$DISTDIR" "$SYSDEPSDIR"
+mkdir -p "$DOWNLOADDIR" "$BUILDDIR" "$PACKAGEDIR" "$DISTDIR" "$SYSDEPSDIR" "$STAGINGDIR" "$TARGETDIR"
 
 # all packages
 skarnet_all_packages=(
@@ -53,7 +58,8 @@ s6-portable-utils
 # s6-rc
 )
 
-platform=$(uname -o | tr  A-Z a-z)
+platform=$(uname -o | tr A-Z a-z | tr "/" "-")
+cygwin_check="cygwin"
 
 targets_order=(
 'native-'${platform}
@@ -61,7 +67,7 @@ targets_order=(
 
 # target platforms + simplified
 declare -A targets
-targets[native-linux]=native
+targets['native-'${platform}]=native
 
 # software versions
 declare -A versions
@@ -122,12 +128,13 @@ for target in "${targets_order[@]}"; do
 
     declare -A configopts
     configopts[skalibs]="--datadir=/etc --with-sysdep-devurandom=yes"
-	[ $(uname -o) == "Cygwin" ] &&  configopts[skalibs]+=" --with-sysdep-pipe2=no --with-sysdep-ppoll=no --with-sysdep-strcasestr=no"
+    [ ${platform} == ${cygwin_check} ] &&  configopts[skalibs]+=" --with-sysdep-pipe2=no --with-sysdep-ppoll=no --with-sysdep-strcasestr=no"
     configopts[execline]=""
     configopts[s6]=""
     configopts[s6-portable-utils]=""
     configopts[s6-dns]=""
-    configopts[s6-networking]="--enable-ssl=libressl --with-ssl-path=$PACKAGEDIR/libressl-${target}"
+    configopts[s6-networking]=""
+    [ ${platform} == ${cygwin_check} ] && configopts[s6-networking]="--enable-ssl=libressl --with-ssl-path=$PACKAGEDIR/libressl-${target}"
     configopts[s6-rc]=""
 
     build_install_skarnet_package() { # {{{
@@ -139,29 +146,32 @@ for target in "${targets_order[@]}"; do
         cd "$BUILDDIR/${target}"
 
         printf "\tExtracting ...\n"
-		tar xf "$DOWNLOADDIR/$package-${versions[$package]}.tar.gz" -C "$BUILDDIR/${target}"
+        tar xf "$DOWNLOADDIR/$package-${versions[$package]}.tar.gz" -C "$BUILDDIR/${target}"
 
         cd "$BUILDDIR/${target}/${package}-${versions[$package]}"
-		
+
         printf "\tConfiguring ...\n"
-		./configure \
+        STATIC_LIBC_OPTS=""
+        [ ${platform} == ${cygwin_check} ] && STATIC_LIBC_OPTS="--enable-static-libc "
+        
+        ./configure \
           --libdir=/usr/lib \
           --enable-static \
           --disable-shared \
-          --enable-static-libc \
+          ${STATIC_LIBC_OPTS} \
           ${includes[$package]} \
           ${libs[$package]} \
           ${sysdeps[$package]} \
           ${configopts[$package]} > /dev/null
-		
+
         printf "\tMaking ...\n"
-		${MAKE_4x} -j > /dev/null
+        ${MAKE_4x} -j > /dev/null
 
         printf "\tInstalling ...\n"
-		rm -rf "$PACKAGEDIR/${package}-${target}" 
-		${MAKE_4x} DESTDIR="$PACKAGEDIR/${package}-${target}" install >/dev/null
+        rm -rf "$PACKAGEDIR/${package}-${target}" 
+        ${MAKE_4x} DESTDIR="$PACKAGEDIR/${package}-${target}" install >/dev/null
     } # }}}
-	
+
     build_install_libressl_package() { # {{{
         local package=$1
         local version=${versions[$package]}
@@ -171,52 +181,60 @@ for target in "${targets_order[@]}"; do
         cd "$BUILDDIR/${target}"
 
         printf "\tExtracting ...\n"
-		tar xf "$DOWNLOADDIR/$package-${versions[$package]}.tar.gz" -C "$BUILDDIR/${target}"
+        tar xf "$DOWNLOADDIR/$package-${versions[$package]}.tar.gz" -C "$BUILDDIR/${target}"
 
         cd "$BUILDDIR/${target}/${package}-${versions[$package]}"
-		
+        
         printf "\tConfiguring ...\n"
-		mkdir -p build
-		cd build		
-		cmake -DCMAKE_INSTALL_PREFIX="$PACKAGEDIR/${package}-${target}" .. 
-		
+        mkdir -p build
+        cd build		
+        cmake -DCMAKE_INSTALL_PREFIX="$PACKAGEDIR/${package}-${target}" -DCMAKE_INSTALL_LIBDIR="$PACKAGEDIR/${package}-${target}/usr/lib" .. > /dev/null
+        
         printf "\tMaking ...\n"
-		${MAKE_4x} -j 
+        ${MAKE_4x} -j > /dev/null
 
         printf "\tInstalling ...\n"
-		rm -rf "$PACKAGEDIR/${package}-${target}" 
-		${MAKE_4x} install 
+        rm -rf "$PACKAGEDIR/${package}-${target}" 
+        ${MAKE_4x} install > /dev/null
     } # }}}
 
     tar_skarnet_package() { # {{{
         local package=$1
         local version=${versions[$package]}
         printf "Packaging ${package}-${version} for ${target}\n"
-		
-		for bindir in 'usr/bin' 'bin' 'usr/sbin' 'sbin'; do
+        
+        for bindir in 'usr/bin' 'bin' 'usr/sbin' 'sbin'; do
             if [[ -d "$PACKAGEDIR/${package}-${target}/$bindir" ]]; then
                 find "$PACKAGEDIR/${package}-${target}/$bindir" -type f -exec strip {} \;
             fi
         done
-    
+
         tar -czf "$DISTDIR/${package}-${versions[$package]}-linux-${targets[$target]}-bin.tar.gz" \
-          --owner 0 \
-          --group 0 \
-          --exclude "usr/lib" \
-          --exclude "usr/include" \
-          -C "$PACKAGEDIR/${package}-${target}" .
-    
+            --owner 0 \
+            --group 0 \
+            --exclude "usr/lib" \
+            --exclude "usr/include" \
+            --exclude "include" \
+            --exclude "share" \
+            -C "$PACKAGEDIR/${package}-${target}" .
+
         local dev_dirs=""
         if [[ -d "$PACKAGEDIR/${package}-${target}/usr/lib" ]]; then
-            dev_dirs="usr/lib"
+            dev_dirs="${dev_dirs} usr/lib"
         fi
         if [[ -d "$PACKAGEDIR/${package}-${target}/usr/include" ]]; then
             dev_dirs="${dev_dirs} usr/include"
         fi
+        if [[ -d "$PACKAGEDIR/${package}-${target}/include" ]]; then
+            dev_dirs="${dev_dirs} include"
+        fi
+        if [[ -d "$PACKAGEDIR/${package}-${target}/share" ]]; then
+            dev_dirs="${dev_dirs} share"
+        fi
         if [[ -n "${dev_dirs}" ]]; then
             tar -czf "$DISTDIR/${package}-${versions[$package]}-linux-${targets[$target]}-dev.tar.gz" \
-              --owner 0 \
-              --group 0 \
+                --owner 0 \
+                --group 0 \
             -C "$PACKAGEDIR/${package}-${target}" $dev_dirs
         fi
     } # }}}
@@ -224,9 +242,25 @@ for target in "${targets_order[@]}"; do
     # install skarnet packages
     for package in "${skarnet_all_packages[@]}"; do
         printf "Running target ${target}...\n"
-		[ ${package} != "libressl" ] && build_install_skarnet_package ${package}
-		[ ${package} == "libressl" ] && build_install_libressl_package ${package}
+        [ ${package} != "libressl" ] && build_install_skarnet_package ${package}
+        [ ${package} == "libressl" ] && build_install_libressl_package ${package}
         tar_skarnet_package ${package}
-		printf "Complete \n\n"		
+        printf "Complete \n\n"		
     done
+done
+
+printf "Populating staging ...\n"
+rm -rf $STAGINGDIR/*
+for archive in $(find $DISTDIR -name "*dev*"); do 
+    name=$(echo $archive | grep -o '[^/]*$')
+    printf "\t$name\n"
+    tar -C $STAGINGDIR -xf $archive
+done
+
+printf "Populating target ...\n"
+rm -rf $TARGETDIR/*
+for archive in $(find $DISTDIR -name "*bin*"); do 
+    name=$(echo $archive | grep -o '[^/]*$')
+    printf "\t$name\n"
+    tar -C $TARGETDIR -xf $archive
 done
