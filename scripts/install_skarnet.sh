@@ -135,8 +135,7 @@ for target in "${targets_order[@]}"; do
     configopts[s6]=""
     configopts[s6-portable-utils]=""
     configopts[s6-dns]=""
-    configopts[s6-networking]=""
-    [ ${platform} == ${cygwin_check} ] && configopts[s6-networking]="--enable-ssl=libressl --with-ssl-path=$PACKAGEDIR/libressl-${target}/usr"
+    configopts[s6-networking]="--enable-ssl=libressl --with-ssl-path=$PACKAGEDIR/libressl-${target}/usr"
     configopts[s6-rc]=""
 
     build_install_skarnet_package() { # {{{
