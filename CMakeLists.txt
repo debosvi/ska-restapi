@@ -16,5 +16,7 @@ endif()
 include_directories(${DEPS_STAGING_DIR}/include)
 include_directories(${DEPS_STAGING_DIR}/usr/include)
 
+link_directories(${DEPS_STAGING_DIR}/usr/lib)
+
 add_subdirectory(src)
 
