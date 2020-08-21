@@ -59,6 +59,8 @@ s6-portable-utils
 )
 
 platform=$(uname -o | tr A-Z a-z | tr "/" "-")
+
+printf "Platform: ${platform}\n"
 cygwin_check="cygwin"
 
 targets_order=(
@@ -134,12 +136,15 @@ for target in "${targets_order[@]}"; do
     configopts[s6-portable-utils]=""
     configopts[s6-dns]=""
     configopts[s6-networking]=""
-    [ ${platform} == ${cygwin_check} ] && configopts[s6-networking]="--enable-ssl=libressl --with-ssl-path=$PACKAGEDIR/libressl-${target}"
+    [ ${platform} == ${cygwin_check} ] && configopts[s6-networking]="--enable-ssl=libressl --with-ssl-path=$PACKAGEDIR/libressl-${target}/usr"
     configopts[s6-rc]=""
 
     build_install_skarnet_package() { # {{{
         local package=$1
         local version=${versions[$package]}
+
+		[ -f "$BUILDDIR/${target}/${package}-${versions[$package]}/.done" ] && return;
+
         printf "Building ${package}-${version} for ${target}\n"
 
         mkdir -p "$BUILDDIR/${target}"
@@ -170,11 +175,16 @@ for target in "${targets_order[@]}"; do
         printf "\tInstalling ...\n"
         rm -rf "$PACKAGEDIR/${package}-${target}" 
         ${MAKE_4x} DESTDIR="$PACKAGEDIR/${package}-${target}" install >/dev/null
+
+		touch "$BUILDDIR/${target}/${package}-${versions[$package]}/.done"
     } # }}}
 
     build_install_libressl_package() { # {{{
         local package=$1
         local version=${versions[$package]}
+		
+		[ -f "$BUILDDIR/${target}/${package}-${versions[$package]}/.done" ] && return;
+		
         printf "Building ${package}-${version} for ${target}\n"
 
         mkdir -p "$BUILDDIR/${target}"
@@ -188,7 +198,11 @@ for target in "${targets_order[@]}"; do
         printf "\tConfiguring ...\n"
         mkdir -p build
         cd build		
-        cmake -DCMAKE_INSTALL_PREFIX="$PACKAGEDIR/${package}-${target}" -DCMAKE_INSTALL_LIBDIR="$PACKAGEDIR/${package}-${target}/usr/lib" .. > /dev/null
+        cmake \
+			-DCMAKE_INSTALL_PREFIX="$PACKAGEDIR/${package}-${target}" \
+			-DCMAKE_INSTALL_INCLUDEDIR="$PACKAGEDIR/${package}-${target}/usr/include" \
+			-DCMAKE_INSTALL_LIBDIR="$PACKAGEDIR/${package}-${target}/usr/lib" \
+			.. > /dev/null
         
         printf "\tMaking ...\n"
         ${MAKE_4x} -j > /dev/null
@@ -196,6 +210,8 @@ for target in "${targets_order[@]}"; do
         printf "\tInstalling ...\n"
         rm -rf "$PACKAGEDIR/${package}-${target}" 
         ${MAKE_4x} install > /dev/null
+		
+		touch "$BUILDDIR/${target}/${package}-${versions[$package]}/.done"
     } # }}}
 
     tar_skarnet_package() { # {{{
@@ -214,7 +230,6 @@ for target in "${targets_order[@]}"; do
             --group 0 \
             --exclude "usr/lib" \
             --exclude "usr/include" \
-            --exclude "include" \
             --exclude "share" \
             -C "$PACKAGEDIR/${package}-${target}" .
 
