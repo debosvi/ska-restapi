@@ -3,6 +3,7 @@ set(LOCAL_APPS httpd)
 
 set(LOCAL_SOURCES
     main.c
+    http_parser.c
 )
 
 add_executable(${LOCAL_APPS} ${LOCAL_SOURCES})
