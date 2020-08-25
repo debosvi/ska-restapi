@@ -41,7 +41,6 @@ s6
 s6-portable-utils
 # s6-linux-utils
 s6-dns
-libressl
 s6-networking
 # s6-rc
 )
@@ -81,7 +80,6 @@ versions[s6-linux-utils]=2.5.1.2
 versions[s6-dns]=2.3.2.0
 versions[s6-networking]=2.3.1.2
 versions[s6-rc]=0.5.1.4
-versions[libressl]=3.2.0
 
 declare -A manifests
 manifests[skarnet_all_packages]="manifest.txt"
@@ -91,9 +89,8 @@ manifests[skarnet_portable_packages]="manifest-portable.txt"
 # downloads
 printf "Downloading packages ...\n"
 for package in "${skarnet_all_packages[@]}"; do
-  [ ${package} != "libressl" ] && dl "http://skarnet.org/software/${package}/${package}-${versions[$package]}.tar.gz"
+  dl "http://skarnet.org/software/${package}/${package}-${versions[$package]}.tar.gz"
 done
-dl "https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.2.0.tar.gz" 
 
 for target in "${targets_order[@]}"; do
     mkdir -p "$SYSDEPSDIR/${target}"
@@ -178,41 +175,6 @@ for target in "${targets_order[@]}"; do
 		touch "$BUILDDIR/${target}/${package}-${versions[$package]}/.done"
     } # }}}
 
-    build_install_libressl_package() { # {{{
-        local package=$1
-        local version=${versions[$package]}
-		
-		[ -f "$BUILDDIR/${target}/${package}-${versions[$package]}/.done" ] && return;
-		
-        printf "Building ${package}-${version} for ${target}\n"
-
-        mkdir -p "$BUILDDIR/${target}"
-        cd "$BUILDDIR/${target}"
-
-        printf "\tExtracting ...\n"
-        tar xf "$DOWNLOADDIR/$package-${versions[$package]}.tar.gz" -C "$BUILDDIR/${target}"
-
-        cd "$BUILDDIR/${target}/${package}-${versions[$package]}"
-        
-        printf "\tConfiguring ...\n"
-        mkdir -p build
-        cd build		
-        cmake \
-			-DCMAKE_INSTALL_PREFIX="$PACKAGEDIR/${package}-${target}" \
-			-DCMAKE_INSTALL_INCLUDEDIR="$PACKAGEDIR/${package}-${target}/usr/include" \
-			-DCMAKE_INSTALL_LIBDIR="$PACKAGEDIR/${package}-${target}/usr/lib" \
-			.. > /dev/null
-        
-        printf "\tMaking ...\n"
-        ${MAKE_4x} -j > /dev/null
-
-        printf "\tInstalling ...\n"
-        rm -rf "$PACKAGEDIR/${package}-${target}" 
-        ${MAKE_4x} install > /dev/null
-		
-		touch "$BUILDDIR/${target}/${package}-${versions[$package]}/.done"
-    } # }}}
-
     tar_skarnet_package() { # {{{
         local package=$1
         local version=${versions[$package]}
@@ -256,8 +218,7 @@ for target in "${targets_order[@]}"; do
     # install skarnet packages
     for package in "${skarnet_all_packages[@]}"; do
         printf "Running target ${target}...\n"
-        [ ${package} != "libressl" ] && build_install_skarnet_package ${package}
-        [ ${package} == "libressl" ] && build_install_libressl_package ${package}
+        build_install_skarnet_package ${package}
         tar_skarnet_package ${package}
         printf "Complete \n\n"		
     done
