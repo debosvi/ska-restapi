@@ -223,19 +223,3 @@ for target in "${targets_order[@]}"; do
         printf "Complete \n\n"		
     done
 done
-
-printf "Populating staging ...\n"
-rm -rf $STAGINGDIR/*
-for archive in $(find $DISTDIR -name "*dev*"); do 
-    name=$(echo $archive | grep -o '[^/]*$')
-    printf "\t$name\n"
-    tar -C $STAGINGDIR -xf $archive
-done
-
-printf "Populating target ...\n"
-rm -rf $TARGETDIR/*
-for archive in $(find $DISTDIR -name "*bin*"); do 
-    name=$(echo $archive | grep -o '[^/]*$')
-    printf "\t$name\n"
-    tar -C $TARGETDIR -xf $archive
-done

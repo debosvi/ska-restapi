@@ -9,7 +9,6 @@ BUILDDIR=$TOPDIR/build
 PACKAGEDIR=$TOPDIR/pkg
 DISTDIR=$TOPDIR/dist
 PATCHDIR=$TOPDIR/patches
-SYSDEPSDIR=$TOPDIR/sysdeps
 STAGINGDIR=$TOPDIR/staging
 TARGETDIR=$TOPDIR/target
 
@@ -33,7 +32,7 @@ dl() {
 MAKE_4x="make"
 
 printf "Creating main dirs\n"
-mkdir -p "$DOWNLOADDIR" "$BUILDDIR" "$PACKAGEDIR" "$DISTDIR" "$SYSDEPSDIR" "$STAGINGDIR" "$TARGETDIR"
+mkdir -p "$DOWNLOADDIR" "$BUILDDIR" "$PACKAGEDIR" "$DISTDIR" "$STAGINGDIR" "$TARGETDIR"
 
 # all packages
 misc_all_packages=(
@@ -44,7 +43,15 @@ sqlite
 platform=$(uname -o | tr A-Z a-z | tr "/" "-")
 
 printf "Platform: ${platform}\n"
-cygwin_check="cygwin"
+cygwin_platform_string="cywin"
+
+
+cygwin_check() {
+	if [[ ${cygwin_platform_string} == ${platform} ]] ; then
+        return 1
+    fi
+	return 0
+}
 
 targets_order=(
 'native-'${platform}
@@ -63,6 +70,12 @@ versions[sqlite]=3.33.0
 declare -A firsttargets
 firsttargets[libressl]=""
 firsttargets[sqlite]=sqlite3.h
+
+# first make targets
+declare -A paralellopts
+paralellopts[libressl]="-j"
+if cygwin_check; then paralellopts[libressl]="-j2"; fi
+paralellopts[sqlite]="-j"
 
 declare -A manifests
 manifests[misc_all_packages]="manifest.txt"
@@ -86,7 +99,7 @@ for target in "${targets_order[@]}"; do
     configopts[libressl]+=" --includedir=$PACKAGEDIR/libressl-$target/usr/include "
     configopts[libressl]+=" --libdir=$PACKAGEDIR/libressl-$target/usr/lib"
     
-	configopts[sqlite]="--disable-shared --enable-static --enable-all --disable-amalgamation"
+	configopts[sqlite]="--disable-shared --enable-static --enable-all --disable-amalgamation --disable-threadsafe"
     configopts[sqlite]+=" --includedir=$PACKAGEDIR/sqlite-$target/usr/include "
     configopts[sqlite]+=" --libdir=$PACKAGEDIR/sqlite-$target/usr/lib"
     
@@ -95,8 +108,8 @@ for target in "${targets_order[@]}"; do
         local version=${versions[$package]}
 		
 		printf "Building ${package}-${version} for ${target}\n"
-
-        mkdir -p "$BUILDDIR/${target}/${package}-${versions[$package]}"
+		
+		mkdir -p "$BUILDDIR/${target}/${package}-${versions[$package]}"
         
         printf "\tExtracting ...\n"
         if [ ! -f "$BUILDDIR/${target}/${package}-${versions[$package]}/.tardone" ]; then 
@@ -115,7 +128,7 @@ for target in "${targets_order[@]}"; do
         printf "\tMaking ...\n"
         if [ ! -f "$BUILDDIR/${target}/${package}-${versions[$package]}/.mkdone" ]; then 
 			[ "${firsttargets[$package]}" != "" ] && ${MAKE_4x} ${firsttargets[$package]} > /dev/null
-			${MAKE_4x} -j > /dev/null
+			${MAKE_4x} ${paralellopts[$package]} > /dev/null
 			touch "$BUILDDIR/${target}/${package}-${versions[$package]}/.mkdone"
 		fi
 
@@ -171,20 +184,4 @@ for target in "${targets_order[@]}"; do
         tar_archive_package ${package}
         printf "Complete \n\n"		
     done
-done
-
-printf "Populating staging ...\n"
-rm -rf $STAGINGDIR/*
-for archive in $(find $DISTDIR -name "*dev*"); do 
-    name=$(echo $archive | grep -o '[^/]*$')
-    printf "\t$name\n"
-    tar -C $STAGINGDIR -xf $archive
-done
-
-printf "Populating target ...\n"
-rm -rf $TARGETDIR/*
-for archive in $(find $DISTDIR -name "*bin*"); do 
-    name=$(echo $archive | grep -o '[^/]*$')
-    printf "\t$name\n"
-    tar -C $TARGETDIR -xf $archive
 done
